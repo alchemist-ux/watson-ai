@@ -15,7 +15,7 @@ function isForbiddenError(error) {
 }
 
 // Ubah ke true kalau ingin login memakai pairing code, bukan scan QR.
-const usePairingCode = false
+const usePairingCode = true
 
 process.on("unhandledRejection", (error) => {
     console.error(chalk.red("Unhandled rejection:"), error)
