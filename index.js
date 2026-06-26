@@ -2,6 +2,7 @@ const pino = require("pino")
 const chalk = require("chalk")
 const readline = require("readline")
 const qrcode = require("qrcode-terminal")
+require("./env")
 const handleCommand = require("./Watson")
 
 const sessionFolder = "./WatsonSesi"
@@ -14,8 +15,27 @@ function isForbiddenError(error) {
     return text.includes("forbidden") || text.includes("status code: 403")
 }
 
-// Ubah ke true kalau ingin login memakai pairing code, bukan scan QR.
-const usePairingCode = true
+function envFlag(name, fallback = false) {
+    const value = String(process.env[name] || "").trim().toLowerCase()
+    if (!value) return fallback
+    return ["1", "true", "yes", "y", "on"].includes(value)
+}
+
+function normalizePairingPhoneNumber(value) {
+    const digits = String(value || "").replace(/\D/g, "")
+    if (!digits) return ""
+    if (digits.startsWith("0")) return `62${digits.slice(1)}`
+    if (digits.startsWith("8")) return `62${digits}`
+    return digits
+}
+
+function maskPhoneNumber(value) {
+    const digits = normalizePairingPhoneNumber(value)
+    if (digits.length <= 7) return digits
+    return `${digits.slice(0, 4)}***${digits.slice(-3)}`
+}
+
+const usePairingCode = envFlag("USE_PAIRING_CODE", false)
 
 process.on("unhandledRejection", (error) => {
     console.error(chalk.red("Unhandled rejection:"), error)
@@ -112,8 +132,18 @@ async function connectToWhatsApp() {
     }
 
     if (usePairingCode && !state.creds.registered) {
-        const phoneNumber = await question(chalk.green("Masukkan nomor WhatsApp diawali 62: "))
-        const code = await watson.requestPairingCode(phoneNumber.replace(/\D/g, ""))
+        let phoneNumber = normalizePairingPhoneNumber(process.env.PAIRING_PHONE_NUMBER)
+
+        if (!phoneNumber) {
+            if (!process.stdin.isTTY) {
+                throw new Error("PAIRING_PHONE_NUMBER belum diisi. Isi variable Railway, contoh: 6281234567890.")
+            }
+
+            phoneNumber = normalizePairingPhoneNumber(await question(chalk.green("Masukkan nomor WhatsApp diawali 62: ")))
+        }
+
+        console.log(chalk.gray(`Meminta pairing code untuk ${maskPhoneNumber(phoneNumber)}...`))
+        const code = await watson.requestPairingCode(phoneNumber)
         console.log(chalk.cyan(`Pairing code: ${code}`))
     }
 
